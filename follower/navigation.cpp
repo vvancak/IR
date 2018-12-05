@@ -20,6 +20,15 @@ int clip(int x, int minimum, int maximum) {
     return x;
 }
 
+bool need_immediate_update(Sensors &sensors) {
+    bool in_turn = sensors.left || sensors.right;
+
+    if (!in_turn && turning) return true;
+    if (in_turn && straight) return true;
+
+    return false;
+}
+
 void navigation(bool slow, Sensors &sensors, Motor &right_motor, Motor &left_motor) {
     if (sensors.center && !sensors.left && !sensors.right) {
         int target = FULL_BEND;

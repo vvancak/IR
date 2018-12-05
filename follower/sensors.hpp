@@ -18,7 +18,6 @@ public:
     bool center;
     bool far_left;
     bool far_right;
-    bool button = false;
     enum Mode mode = towards;
 
 private:
@@ -28,6 +27,7 @@ private:
     int real_far_left;
     int real_far_right;
     int center_off;
+    bool button = false;
 
     bool read_right();
 
@@ -39,7 +39,15 @@ private:
 
     bool read_far_left();
 
-    bool read_button();
+    void read_button();
+
+    bool read();
+
+    void right_sign();
+
+    void left_sign();
+
+    State get_state();
 
 public:
     State update(void);

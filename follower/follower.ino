@@ -29,7 +29,9 @@ void setup() {
     pinMode(RIGHT, INPUT);
     pinMode(FAR_RIGHT, INPUT);
     pinMode(LED, OUTPUT);
+
     pinMode(BUTTON, INPUT);
+    digitalWrite(BUTTON, HIGH);
 
     Serial.begin(9600);
 }
@@ -37,20 +39,19 @@ void setup() {
 void loop() {
     auto state = sensors.update();
 
-    if(state == finished)
-    {
+    int loop_counter = 0;
+    while (!need_immediate_update(sensors) && ++loop_counter < 10) {
+        delay(5);
+        state = sensors.update();
+    }
+
+    if (state == finished) {
         right_motor.set_speed(0);
         left_motor.set_speed(0);
-        
         return;
     }
 
-    if (state != last_state)
-    {
-        navigation(true, sensors, right_motor, left_motor);
-        last_state = state;
-    } else
-        navigation(false, sensors, right_motor, left_motor);
-
-    delay(50);
+    bool slow = state != last_state;
+    navigation(slow, sensors, right_motor, left_motor);
+    last_state = state;
 }
