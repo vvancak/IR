@@ -135,8 +135,8 @@ State Sensors::update() {
     read_button();
     if (!read()) return get_state();
 
-    if (state == State::right_sign) right_sign();
-    if (state == State::left_sign) left_sign();
+    //if (state == State::right_sign) right_sign();
+    //if (state == State::left_sign) left_sign();
 
     return get_state();
 }

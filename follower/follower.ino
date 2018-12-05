@@ -36,22 +36,23 @@ void setup() {
     Serial.begin(9600);
 }
 
+auto state = sensors.update();
+
 void loop() {
-    auto state = sensors.update();
-
-    int loop_counter = 0;
-    while (!need_immediate_update(sensors) && ++loop_counter < 10) {
-        delay(5);
-        state = sensors.update();
-    }
-
     if (state == finished) {
         right_motor.set_speed(0);
         left_motor.set_speed(0);
         return;
     }
 
-    bool slow = state != last_state;
-    navigation(slow, sensors, right_motor, left_motor);
+    state = sensors.update();
+    int loop_counter = 0;
+
+    while (!need_immediate_update(sensors) && ++loop_counter < 50) {
+        delay(1);
+        state = sensors.update();
+    }
+
+    navigation(sensors, right_motor, left_motor);
     last_state = state;
 }
