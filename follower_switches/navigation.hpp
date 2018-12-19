@@ -5,37 +5,40 @@
 #include "motor.hpp"
 #include "sensors.hpp"
 
-enum State {
-    finished, nominal, before_switch, on_switch, between_switch, on_joint
+enum Path {
+    longer, shorter
 };
 
-enum Switch {
+enum Edge {
     left, right
 };
 
 class Navigation {
 private:
+    bool finished = false;
+
     int straight = 0;
     int turning = 0;
 
-    State state = State::nominal;
-    Switch sw_state = Switch::left;
+    Edge follow_edge = Edge::left;
+    long long marker_time;
+    int line_crossings = 0;
 
     Sensors &sensors;
     Motor &left_motor;
     Motor &right_motor;
 
-    void update_state();
-
     void go_straight();
 
     void go_turn(Motor &inside_motor, Motor &outside_motor);
 
-    void follow_line();
-
     void follow_line_edge(bool inside_sensor, Motor &inside_motor, Motor &outside_motor);
 
+    void update_follow_edge();
+
 public:
+    Path path_mode = Path::shorter;
+
     Navigation(Sensors &sensors, Motor &left_motor, Motor &right_motor);
 
     bool need_immediate_update();

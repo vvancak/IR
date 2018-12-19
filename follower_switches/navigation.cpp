@@ -4,60 +4,11 @@
 #include "digital_pins.hpp"
 
 
-const int FULL = 30;
+const int FULL = 20;
+const int MIN_DELAY = 1;
 
-void Navigation::update_state() {
-    switch (state) {
-
-        // Line following
-        case State::nominal:
-            if (sensors.far_left && sensors.far_right) state = State::finished;
-            else if (sensors.far_right) {
-                if (sensors.button_mode == Mode::shortest) sw_state = right;
-                if (sensors.button_mode == Mode::longest) sw_state = left;
-                digitalWrite(LED, HIGH);
-                state = State::before_switch;
-            } else if (sensors.far_left) {
-                if (sensors.button_mode == Mode::shortest) sw_state = left;
-                if (sensors.button_mode == Mode::longest) sw_state = right;
-                digitalWrite(LED, LOW);
-                state = State::before_switch;
-            }
-            break;
-
-            // Before Switch
-        case State::before_switch:
-            if (sensors.center) {
-                if (sw_state == right && sensors.left) state = State::on_switch;
-                if (sw_state == left && sensors.right) state = State::on_switch;
-            }
-            break;
-
-            // Switch
-        case State::on_switch:
-            if (sensors.center) {
-                if (sw_state == right && !sensors.left) state = State::between_switch;
-                if (sw_state == left && !sensors.right) state = State::between_switch;
-            }
-            break;
-
-            // Follow the line between switch and joint back into one track
-        case State::between_switch:
-            if (sensors.center) {
-                if (sw_state == right && sensors.left) state = State::on_joint;
-                if (sw_state == left && sensors.right) state = State::on_joint;
-            }
-            break;
-
-            // Join back to the track
-        case State::on_joint:
-            if (sensors.center) {
-                if (sw_state == right && !sensors.left) state = State::nominal;
-                if (sw_state == left && !sensors.right) state = State::nominal;
-            }
-            break;
-    }
-}
+const int TIMEOUT_FIRST = 5;
+const int TIMEOUT_SECOND = 20;
 
 void Navigation::go_straight() {
     left_motor.set_speed(FULL);
@@ -75,18 +26,55 @@ void Navigation::go_turn(Motor &inside_motor, Motor &outside_motor) {
     straight = 0;
 }
 
-void Navigation::follow_line() {
-    if (sensors.left) go_turn(left_motor, right_motor);
-    else if (sensors.right) go_turn(right_motor, left_motor);
-    else if (sensors.center) go_straight();
+void Navigation::follow_line_edge(bool inside_sensor, Motor &inside_motor, Motor &outside_motor) {
+    if (inside_sensor) go_turn(inside_motor, outside_motor);
+    else if (!sensors.center) go_turn(outside_motor, inside_motor);
+    else go_straight();
 }
 
-void Navigation::follow_line_edge(bool inside_sensor, Motor &inside_motor, Motor &outside_motor) {
-    bool center_sensor = sensors.center;
+void Navigation::update_follow_edge() {
+    long current_time = millis() / 1000;
 
-    if (inside_sensor) go_turn(inside_motor, outside_motor);
-    else if (!center_sensor) go_turn(outside_motor, inside_motor);
-    else go_straight();
+    Serial.println(current_time);
+    Serial.println(line_crossings);
+    Serial.println("====");
+
+    int time_diff = current_time - marker_time;
+    if (time_diff < MIN_DELAY) return;
+
+    // Timeouts for line crossings
+    if (line_crossings == 2 && time_diff >= TIMEOUT_FIRST) line_crossings = 0;
+    if (line_crossings > 0 && time_diff >= TIMEOUT_SECOND) line_crossings = 0;
+
+    if (line_crossings <= 0) {
+        // Right marker
+        if (sensors.far_right) {
+            if (path_mode == Path::shorter) follow_edge = Edge::right;
+            if (path_mode == Path::longer) follow_edge = Edge::left;
+
+            line_crossings = 2;
+            marker_time = current_time;
+        }
+
+        // Left marker
+        if (sensors.far_left) {
+            if (path_mode == Path::shorter) follow_edge = Edge::left;
+            if (path_mode == Path::longer) follow_edge = Edge::right;
+
+            line_crossings = 2;
+            marker_time = current_time;
+        }
+    } else {
+        // Marker when ignoring markers
+        if (sensors.far_right_turned_on() && follow_edge == Edge::left ) {
+          line_crossings--;
+          marker_time = current_time;
+        }
+        if (sensors.far_left_turned_on() && follow_edge == Edge::right ) {
+          line_crossings--;
+          marker_time = current_time;
+        }
+    }
 }
 
 Navigation::Navigation(Sensors &sensors, Motor &left_motor, Motor &right_motor) :
@@ -95,35 +83,43 @@ Navigation::Navigation(Sensors &sensors, Motor &left_motor, Motor &right_motor) 
         right_motor(right_motor) {}
 
 bool Navigation::need_immediate_update() {
-    bool sign = sensors.far_right || sensors.far_left;
-    if (sign) return true;
+    // Finish sensors
+    bool stop = sensors.far_right && sensors.far_left;
+    if (stop) return true;
 
-    bool turning = sensors.left || sensors.right;
-    if (turning && straight > 0) return true;
+    // Far sensors off
+    if (sensors.far_right_turned_on()) return true;
+    if (sensors.far_left_turned_on()) return true;
 
-    bool straight = !sensors.left && !sensors.right;
-    if (straight && turning > 0) return true;
+    // Far sensors on
+    if (sensors.far_right_turned_on()) return true;
+    if (sensors.far_left_turned_on()) return true;
+
+    // Sensors off
+    if (sensors.right_turned_off()) return true;
+    if (sensors.left_turned_off()) return true;
+
+    // Sensors on
+    if (sensors.right_turned_on()) return true;
+    if (sensors.left_turned_on()) return true;
 
     return false;
 }
 
 void Navigation::navigate() {
-    update_state();
+    if (line_crossings == 0) digitalWrite(LED, HIGH);
+    else digitalWrite(LED, LOW);
 
-    // Finished => Stop
-    if (state == State::finished) {
+    // Finished
+    if (finished) {
         left_motor.set_speed(0);
         right_motor.set_speed(0);
+        return;
     }
+    finished = sensors.far_left && sensors.far_right;
 
-        // Nominal => Line Follower
-    else if (state == State::nominal) {
-        follow_line();
-    }
-
-        // Anything else - Follow line edge according to the button
-    else {
-        if (sw_state == Switch::left) follow_line_edge(sensors.left, left_motor, right_motor);
-        if (sw_state == Switch::right) follow_line_edge(sensors.right, right_motor, left_motor);
-    }
+    // Follow Edge
+    update_follow_edge();
+    if (follow_edge == Edge::left) follow_line_edge(sensors.left, left_motor, right_motor);
+    if (follow_edge == Edge::right) follow_line_edge(sensors.right, right_motor, left_motor);
 }

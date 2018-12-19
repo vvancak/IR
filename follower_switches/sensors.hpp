@@ -4,10 +4,6 @@
 #include <Arduino.h>
 #include "digital_pins.hpp"
 
-enum Mode {
-    shortest, longest
-};
-
 class Sensors {
 public:
     bool far_left = 0;
@@ -15,7 +11,11 @@ public:
     bool center = 0;
     bool right = 0;
     bool far_right = 0;
-    Mode button_mode = Mode::shortest;
+
+    bool prev_far_left = 0;
+    bool prev_left = 0;
+    bool prev_right = 0;
+    bool prev_far_right = 0;
 
 private:
     bool read_right();
@@ -28,10 +28,26 @@ private:
 
     bool read_far_left();
 
-    bool read_button();
-
 public:
     void update();
+
+    bool button_pressed();
+
+    bool left_turned_on();
+
+    bool left_turned_off();
+
+    bool right_turned_on();
+
+    bool right_turned_off();
+
+    bool far_left_turned_on();
+
+    bool far_left_turned_off();
+
+    bool far_right_turned_on();
+
+    bool far_right_turned_off();
 };
 
 #endif
